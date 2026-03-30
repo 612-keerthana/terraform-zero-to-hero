@@ -3,59 +3,80 @@ provider "aws" {
   region = "us-east-1"  # Replace with your desired AWS region.
 }
 
+# Variables
 variable "cidr" {
   default = "10.0.0.0/16"
 }
 
-resource "aws_key_pair" "example" {
-  key_name   = "terraform-demo-abhi"  # Replace with your desired key name
-  public_key = file("~/.ssh/id_rsa.pub")  # Replace with the path to your public key file
+# Keypair deploy on to aws
+resource "aws_key_pair" "flask_app_key" {
+  key_name   = "flask_app_key"  # Replace with your desired key name
+  public_key = file("~/.ssh/id_rsa.pub") # Replace with the path to your public key file
 }
 
-resource "aws_vpc" "myvpc" {
+# VPC
+resource "aws_vpc" "flask_app_vpc" {
   cidr_block = var.cidr
-}
-
-resource "aws_subnet" "sub1" {
-  vpc_id                  = aws_vpc.myvpc.id
-  cidr_block              = "10.0.0.0/24"
-  availability_zone       = "us-east-1a"
-  map_public_ip_on_launch = true
-}
-
-resource "aws_internet_gateway" "igw" {
-  vpc_id = aws_vpc.myvpc.id
-}
-
-resource "aws_route_table" "RT" {
-  vpc_id = aws_vpc.myvpc.id
-
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.igw.id
+  tags = {
+    Name = "flask_app_vpc"
   }
 }
 
-resource "aws_route_table_association" "rta1" {
-  subnet_id      = aws_subnet.sub1.id
-  route_table_id = aws_route_table.RT.id
+# Public subnet
+resource "aws_subnet" "flask_app_pub_sub1" {
+  vpc_id                  = aws_vpc.flask_app_vpc.id
+  cidr_block              = "10.0.0.0/24"
+  availability_zone       = "us-east-1a"
+  map_public_ip_on_launch = true
+  tags = {
+    Name = "flask_app_pub_sub1"
+  }
 }
 
-resource "aws_security_group" "webSg" {
-  name   = "web"
-  vpc_id = aws_vpc.myvpc.id
+# Internet gateway 
+resource "aws_internet_gateway" "flask_app_igw" {
+  vpc_id = aws_vpc.flask_app_vpc.id
+  tags = {
+    Name = "flask_app_igw"
+  }
+}
+
+# Route table for public subnet
+resource "aws_route_table" "flask_app_pub_RT" {
+  vpc_id = aws_vpc.flask_app_vpc.id
+  route {
+    # Directs all outbound traffic to the Internet Gateway
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.flask_app_igw.id
+  }
+  tags = {
+    Name = "flask_app_pub_RT"
+  }
+}
+
+# Associate the Route Table with the public subnet
+resource "aws_route_table_association" "flask_app_pub_RTA1" {
+  subnet_id      = aws_subnet.flask_app_pub_sub1.id
+  route_table_id = aws_route_table.flask_app_pub_RT.id
+}
+
+# Security Group to allow SSH (port 22) and web traffic (port 80)
+resource "aws_security_group" "flask_app_web_sg" {
+  name        = "flask_app_web_sg"
+  description = "Allow SSH and HTTP inbound traffic"
+  vpc_id      = aws_vpc.flask_app_vpc.id
 
   ingress {
-    description = "HTTP from VPC"
-    from_port   = 80
-    to_port     = 80
+    description = "SSH from VPC"
+    from_port   = 22
+    to_port     = 22
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
   ingress {
-    description = "SSH"
-    from_port   = 22
-    to_port     = 22
+    description = "HTTP from VPC"
+    from_port   = 80
+    to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
@@ -68,16 +89,23 @@ resource "aws_security_group" "webSg" {
   }
 
   tags = {
-    Name = "Web-sg"
+    Name = "flask_app_web_sg"
   }
 }
 
-resource "aws_instance" "server" {
-  ami                    = "ami-0261755bbcb8c4a84"
-  instance_type          = "t2.micro"
-  key_name      = aws_key_pair.example.key_name
-  vpc_security_group_ids = [aws_security_group.webSg.id]
-  subnet_id              = aws_subnet.sub1.id
+# EC2 instance in the public subnet
+
+resource "aws_instance" "flask_app_web_server" {
+  ami           = "ami-0b6c6ebed2801a5cb"
+  instance_type = "t2.micro"
+  key_name      = aws_key_pair.flask_app_key.key_name
+  subnet_id     = aws_subnet.flask_app_pub_sub1.id
+  vpc_security_group_ids = [aws_security_group.flask_app_web_sg.id]
+  # Because map_public_ip_on_launch is true on the subnet, this instance gets a public IP
+  
+  tags = {
+    Name = "flask_app_web_server"
+  }
 
   connection {
     type        = "ssh"
@@ -98,9 +126,8 @@ resource "aws_instance" "server" {
       "sudo apt update -y",  # Update package lists (for ubuntu)
       "sudo apt-get install -y python3-pip",  # Example package installation
       "cd /home/ubuntu",
-      "sudo pip3 install flask",
-      "sudo python3 app.py &",
+      "sudo apt install -y python3-flask",
+      "sudo nohup python3 app.py &"
     ]
   }
 }
-

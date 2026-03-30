@@ -1,11 +1,11 @@
 variable "ami_value" {
-    description = "value for the ami"
+  description = "EC2 instance AMI Image"
 }
 
 variable "instance_type_value" {
-    description = "value for instance_type"
+  description = "EC2 Instance type/flavor"
 }
 
-variable "subnet_id_value" {
-    description = "value for the subnet_id"
+variable "key_name_value" {
+  description = "EC2 Instance key pair to connect"
 }

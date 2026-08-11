@@ -41,7 +41,7 @@ resource "aws_security_group" "Web_SG1" {
 
 resource "aws_vpc_security_group_ingress_rule" "Web_SG1_ingress_ip" {
   security_group_id = aws_security_group.Web_SG1.id
-  cidr_ipv4         = "124.123.80.27/32"
+  cidr_ipv4         = "xx.xx.xx.xx/32" #Allow all port to incoming connection from specific group
   from_port         = 0
   ip_protocol       = "-1"
   to_port           = 0
